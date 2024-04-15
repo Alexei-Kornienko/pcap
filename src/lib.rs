@@ -77,6 +77,10 @@ pub use capture::{
     {Activated, Active, Capture, Dead, Inactive, Offline, Precision, State},
 };
 pub use codec::PacketCodec;
+
+#[cfg(all(not(windows), feature = "capture-stream"))]
+pub use capture::selectable::SelectableCapture;
+
 pub use device::{Address, ConnectionStatus, Device, DeviceFlags, IfFlags};
 pub use linktype::Linktype;
 pub use packet::{Packet, PacketHeader};
