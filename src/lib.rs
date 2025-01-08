@@ -63,7 +63,7 @@ use std::fmt;
 
 use self::Error::*;
 
-mod capture;
+pub mod capture;
 mod codec;
 mod device;
 mod linktype;
