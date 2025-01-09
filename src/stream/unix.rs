@@ -42,16 +42,16 @@ impl<C: PacketCodec> PacketStream<C> {
         loop {
             let mut guard = self.inner.writable_mut().await?;
 
-            match guard.try_io(|inner| Ok(inner.get_mut().get_inner_mut().sendpacket(buf).unwrap()))
-            {
-                Ok(Ok(())) => return Ok(()),
-                Ok(Err(e)) => {
-                    if e.kind() == ErrorKind::WouldBlock {
-                        continue;
-                    } else {
-                        return Err(Error::IoError(e.kind()));
-                    }
-                }
+            match guard.try_io(
+                |inner| match inner.get_mut().get_inner_mut().sendpacket(buf) {
+                    Ok(r) => Ok(r),
+                    Err(e) => match e {
+                        Error::IoError(kind) => Err(std::io::Error::new(kind, "Pcap IO error")),
+                        _ => panic!("Unknown error {}", e),
+                    },
+                },
+            ) {
+                Ok(result) => return result.map_err(|e| Error::IoError(e.kind())),
                 Err(_would_block) => continue,
             }
         }
