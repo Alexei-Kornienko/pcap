@@ -5,14 +5,16 @@ use crate::{
     raw, Error,
 };
 
+use super::Active;
+
 /// Newtype [`Capture`] wrapper that exposes `pcap_get_selectable_fd()`.
-pub struct SelectableCapture<T: State + ?Sized> {
-    inner: Capture<T>,
+pub struct SelectableCapture {
+    inner: Capture<Active>,
     fd: RawFd,
 }
 
-impl<T: Activated + ?Sized> SelectableCapture<T> {
-    pub fn new(capture: Capture<T>) -> Result<Self, Error> {
+impl SelectableCapture {
+    pub fn new(capture: Capture<Active>) -> Result<Self, Error> {
         let fd = unsafe { raw::pcap_get_selectable_fd(capture.as_ptr()) };
         if fd == -1 {
             return Err(Error::InvalidRawFd);
@@ -20,12 +22,12 @@ impl<T: Activated + ?Sized> SelectableCapture<T> {
         Ok(Self { inner: capture, fd })
     }
 
-    pub fn get_inner_mut(&mut self) -> &mut Capture<T> {
+    pub fn get_inner_mut(&mut self) -> &mut Capture<Active> {
         &mut self.inner
     }
 }
 
-impl<T: Activated + ?Sized> AsRawFd for SelectableCapture<T> {
+impl AsRawFd for SelectableCapture {
     fn as_raw_fd(&self) -> RawFd {
         self.fd
     }

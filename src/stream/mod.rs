@@ -11,17 +11,17 @@ pub use windows::PacketStream;
 use crate::{
     capture::{Activated, Capture},
     codec::PacketCodec,
-    Error,
+    Active, Error,
 };
 
-impl<T: Activated + ?Sized> Capture<T> {
+impl Capture<Active> {
     /// Returns this capture as a [`futures::Stream`] of packets.
     ///
     /// # Errors
     ///
     /// If this capture is set to be blocking, or if the network device
     /// does not support `select()`, an error will be returned.
-    pub fn stream<C: PacketCodec>(self, codec: C) -> Result<PacketStream<T, C>, Error> {
+    pub fn stream<C: PacketCodec>(self, codec: C) -> Result<PacketStream<C>, Error> {
         if !self.is_nonblock() {
             return Err(Error::NonNonBlock);
         }

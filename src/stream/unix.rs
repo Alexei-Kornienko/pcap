@@ -1,7 +1,7 @@
 //! Support for asynchronous packet iteration.
 //!
 //! See [`Capture::stream`](super::Capture::stream).
-use std::io;
+use std::io::{self, ErrorKind};
 use std::marker::Unpin;
 use std::pin::Pin;
 use std::task::{self, Poll};
@@ -9,6 +9,7 @@ use std::task::{self, Poll};
 use futures::ready;
 use tokio::io::unix::AsyncFd;
 
+use crate::Active;
 use crate::{
     capture::{selectable::SelectableCapture, Activated, Capture},
     codec::PacketCodec,
@@ -16,16 +17,16 @@ use crate::{
 };
 
 /// Implement Stream for async use of pcap
-pub struct PacketStream<T: Activated + ?Sized, C> {
-    inner: AsyncFd<SelectableCapture<T>>,
+pub struct PacketStream<C: PacketCodec> {
+    inner: AsyncFd<SelectableCapture>,
     codec: C,
 }
 
-impl<T: Activated + ?Sized, C> PacketStream<T, C> {
-    pub(crate) fn new(capture: Capture<T>, codec: C) -> Result<Self, Error> {
+impl<C: PacketCodec> PacketStream<C> {
+    pub(crate) fn new(capture: Capture<Active>, codec: C) -> Result<Self, Error> {
         let capture = SelectableCapture::new(capture)?;
         Ok(PacketStream {
-            inner: AsyncFd::with_interest(capture, tokio::io::Interest::READABLE)?,
+            inner: AsyncFd::new(capture)?,
             codec,
         })
     }
@@ -33,14 +34,33 @@ impl<T: Activated + ?Sized, C> PacketStream<T, C> {
     /// Returns a mutable reference to the inner [`Capture`].
     ///
     /// The caller must ensure the capture will not be set to be blocking.
-    pub fn capture_mut(&mut self) -> &mut Capture<T> {
+    pub fn capture_mut(&mut self) -> &mut Capture<Active> {
         self.inner.get_mut().get_inner_mut()
+    }
+
+    pub async fn sendpacket(&mut self, buf: &[u8]) -> Result<(), Error> {
+        loop {
+            let mut guard = self.inner.writable_mut().await?;
+
+            match guard.try_io(|inner| Ok(inner.get_mut().get_inner_mut().sendpacket(buf).unwrap()))
+            {
+                Ok(Ok(())) => return Ok(()),
+                Ok(Err(e)) => {
+                    if e.kind() == ErrorKind::WouldBlock {
+                        continue;
+                    } else {
+                        return Err(Error::IoError(e.kind()));
+                    }
+                }
+                Err(_would_block) => continue,
+            }
+        }
     }
 }
 
-impl<T: Activated + ?Sized, C> Unpin for PacketStream<T, C> {}
+impl<C: PacketCodec> Unpin for PacketStream<C> {}
 
-impl<T: Activated + ?Sized, C: PacketCodec> futures::Stream for PacketStream<T, C> {
+impl<C: PacketCodec> futures::Stream for PacketStream<C> {
     type Item = Result<C::Item, Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Option<Self::Item>> {
