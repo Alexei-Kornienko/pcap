@@ -166,8 +166,19 @@ impl<T: State + ?Sized> Capture<T> {
         }
     }
 
+    #[cfg(windows)]
     fn get_err(&self) -> Error {
         unsafe { Error::new(raw::pcap_geterr(self.handle.as_ptr())) }
+    }
+
+    #[cfg(not(windows))]
+    fn get_err(&self) -> Error {
+        let error = errno::errno();
+        if error.0 == 11 {
+            Error::IoError(std::io::ErrorKind::WouldBlock)
+        } else {
+            unsafe { Error::new(raw::pcap_geterr(self.handle.as_ptr())) }
+        }
     }
 }
 
